@@ -54,7 +54,7 @@ tasks {
 
     patchPluginXml {
         sinceBuild.set("222") // 2022.2 NOTE Java 17 is now required
-        untilBuild.set("233.*")
+        untilBuild.set("241.*")
     }
 
     signPlugin {
