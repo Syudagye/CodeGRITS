@@ -6,10 +6,7 @@ import javax.xml.transform.TransformerException;
 import com.intellij.openapi.application.ApplicationInfo;
 import com.intellij.openapi.editor.*;
 import com.intellij.openapi.editor.event.*;
-import com.intellij.openapi.fileEditor.FileDocumentManager;
-import com.intellij.openapi.fileEditor.FileEditorManager;
-import com.intellij.openapi.fileEditor.FileEditorManagerEvent;
-import com.intellij.openapi.fileEditor.FileEditorManagerListener;
+import com.intellij.openapi.fileEditor.*;
 import com.intellij.openapi.project.Project;
 import com.intellij.openapi.vfs.VirtualFile;
 import org.apache.commons.io.FileUtils;
@@ -20,6 +17,7 @@ import java.awt.*;
 import java.awt.event.MouseEvent;
 import java.io.*;
 import java.util.Arrays;
+import java.util.List;
 import java.util.Timer;
 import java.util.TimerTask;
 import java.util.function.Consumer;
@@ -48,6 +46,7 @@ public final class IDETracker implements Disposable {
     Element actions = iDETracking.createElement("actions");
     Element archives = iDETracking.createElement("archives");
     Element typings = iDETracking.createElement("typings");
+    Element inlays = iDETracking.createElement("inlays");
     Element files = iDETracking.createElement("files");
     Element mouses = iDETracking.createElement("mouses");
     Element carets = iDETracking.createElement("carets");
@@ -246,6 +245,37 @@ public final class IDETracker implements Disposable {
         }
     };
 
+    InlayModel.Listener inlayListnener = new InlayModel.Listener() {
+        @Override
+        public void onAdded(@NotNull Inlay<?> inlay) {
+            Element inlayElement = iDETracking.createElement("inlay");
+            inlays.appendChild(inlayElement);
+            inlayElement.setAttribute("timestamp", String.valueOf(System.currentTimeMillis()));
+            EditorCustomElementRenderer renderer = inlay.getRenderer();
+            var rendererClass = renderer.getClass();
+            inlayElement.setAttribute("renderer", rendererClass.getName());
+
+            // Let's try to get the lines from the renderer, if it's the copilot inlay renderer
+            try {
+                var linesField = rendererClass.getDeclaredField("lines");
+                linesField.setAccessible(true);
+                List<String> lines = (List<String>) linesField.get(renderer);
+
+                if (lines != null && !lines.isEmpty()) {
+                    inlayElement.setAttribute("lines", lines.stream().reduce("", (x, y) -> x + "\n" + y));
+                }
+            } catch (IllegalAccessException | NoSuchFieldException  e) {
+                //inlayElement.setAttribute("exception", e.getClass().getName());
+            }
+            handleElement(inlayElement);
+        }
+    };
+
+    Disposable dummyDisposable = new Disposable() {
+        @Override
+        public void dispose() {}
+    };
+
     /**
      * This constructor initializes the IDE tracker.
      */
@@ -267,6 +297,7 @@ public final class IDETracker implements Disposable {
         root.appendChild(archives);
         root.appendChild(actions);
         root.appendChild(typings);
+        root.appendChild(inlays);
         root.appendChild(files);
         root.appendChild(mouses);
         root.appendChild(carets);
@@ -328,6 +359,11 @@ public final class IDETracker implements Disposable {
                                     RelativePathGetter.getRelativePath(file.getPath(), projectPath));
                             archiveFile(file.getPath(), timestamp, "fileOpened", null);
                             handleElement(fileElement);
+
+                            Editor editor = source.getSelectedTextEditor();
+                            if (editor != null) {
+                                editor.getInlayModel().addListener(inlayListnener, dummyDisposable);
+                            }
                         }
                     }
 
@@ -365,6 +401,11 @@ public final class IDETracker implements Disposable {
                                         RelativePathGetter.getRelativePath(event.getNewFile().getPath(), projectPath));
                                 archiveFile(event.getNewFile().getPath(), String.valueOf(System.currentTimeMillis()),
                                         "selectionChanged | NewFile", null);
+
+                                Editor editor = event.getManager().getSelectedTextEditor();
+                                if (editor != null) {
+                                    editor.getInlayModel().addListener(inlayListnener, dummyDisposable);
+                                }
                             }
                             handleElement(fileElement);
                         }
