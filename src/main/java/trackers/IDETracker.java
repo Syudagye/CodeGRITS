@@ -262,10 +262,10 @@ public final class IDETracker implements Disposable {
                 List<String> lines = (List<String>) linesField.get(renderer);
 
                 if (lines != null && !lines.isEmpty()) {
-                    inlayElement.setAttribute("lines", lines.stream().reduce("", (x, y) -> x + "\n" + y));
+                    inlayElement.setAttribute("lines", String.join("\n", lines));
                 }
             } catch (IllegalAccessException | NoSuchFieldException  e) {
-                //inlayElement.setAttribute("exception", e.getClass().getName());
+                // TODO: handle exception somehow
             }
             handleElement(inlayElement);
         }
